@@ -9,13 +9,13 @@ class ChatController extends Controller
 {
     public function chat(Request $request)
     {
-        // Validate user message
         $validated = $request->validate([
-            'message' => 'required|string|max:5000',
+            'messages' => 'required|array|min:1',
+            'messages.*.role' => 'required|string',
+            'messages.*.content' => 'required|string',
+            'temperature'=>'required|numeric|min:0|max:2',
         ]);
 
-
-        // Send message to OpenRouter
         $response = Http::withHeaders([
             'Authorization' => 'Bearer ' . env('OPENROUTER_API_KEY'),
             'Content-Type' => 'application/json',
@@ -23,19 +23,20 @@ class ChatController extends Controller
 
             'model' => 'openrouter/free',
 
-            'messages' => [
-                [
-                    'role' => 'user',
-                    'content' => $validated['message'],
-                ]
-            ]
+            'messages' => $validated['messages'],
+            'temperature'=>$validated['temperature']
 
         ]);
 
+        if (!$response->successful()) {
+            return response()->json([
+                'reply' => 'Error communicating with the AI service.',
+                'error' => $response->body(),
+            ], 500);
+        }
 
-        // Return AI response
         return response()->json([
-            'reply' => $response['choices'][0]['message']['content']
+            'reply' => $response['choices'][0]['message']['content'],
         ]);
     }
 }

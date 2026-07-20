@@ -6,110 +6,180 @@ function App() {
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(false);
 
+  const [showSettings, setShowSettings] = useState(false);
+
+  const [temperature, setTemperature] = useState(() => {
+    const saved = localStorage.getItem("temperature");
+    return saved ? Number(saved) : 0.7;
+  });
+
+  const saveSettings = () => {
+    localStorage.setItem("temperature", temperature);
+    setShowSettings(false);
+  };
+
   const sendMessage = async () => {
-  if (message.trim() === "") return;
+    if (message.trim() === "") return;
 
-  const userMessage = message;
-
-  setMessages((prev) => [
-    ...prev,
-    {
+    const userMessage = {
       role: "user",
-      text: userMessage,
-    },
-  ]);
+      content: message,
+    };
 
-  setMessage("");
+    const conversation = [...messages, userMessage];
 
-  // Start loading
-  setLoading(true);
+    setMessages(conversation);
 
-  try {
-    const response = await fetch("https://ai-chatbot-backend-60lr.onrender.com/api/chat", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Accept": "application/json",
-      },
-      body: JSON.stringify({
-        message: userMessage,
-      }),
-    });
+    setMessage("");
 
-    const data = await response.json();
+    setLoading(true);
 
-    setMessages((prev) => [
-      ...prev,
-      {
-        role: "assistant",
-        text: data.reply,
-      },
-    ]);
+    try {
+      const response = await fetch(
+        "https://ai-chatbot-backend-60lr.onrender.com/api/chat",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+          },
+          body: JSON.stringify({
+            messages: conversation,
+            temperature: temperature,
+          }),
+        }
+      );
 
-  } catch (error) {
+      const data = await response.json();
 
-    setMessages((prev) => [
-      ...prev,
-      {
-        role: "assistant",
-        text: "Unable to connect to the server.",
-      },
-    ]);
-
-  } finally {
-    // Stop loading
-    setLoading(false);
-  }
-};
+      setMessages([
+        ...conversation,
+        {
+          role: "assistant",
+          content: data.reply ?? "No response received from AI.",
+        },
+      ]);
+    } catch (error) {
+      setMessages([
+        ...conversation,
+        {
+          role: "assistant",
+          content: "Unable to connect to the server.",
+        },
+      ]);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
-    <div className="container">
-      <div className="chat-box">
+    <>
+      <button
+    className="settings-btn"
+    onClick={() => {
+      console.log("Settings clicked");
+      setShowSettings(true);
+    }}
+  >
+    ⚙️
+  </button>
 
-            <div className="messages">
-      {messages.length === 0 ? (
-        <p className="empty">
-          Start chatting with the AI...
-        </p>
-      ) : (
-        messages.map((msg, index) => (
-          <div
-            key={index}
-            className={msg.role === "user" ? "message user" : "message ai"}
-          >
-            {msg.text}
+      <div className="container">
+        <div className="chat-box">
+          <div className="messages">
+            {messages.length === 0 ? (
+              <p className="empty">Start chatting with the AI...</p>
+            ) : (
+              messages.map((msg, index) => (
+                <div
+                  key={index}
+                  className={msg.role === "user" ? "message user" : "message ai"}
+                >
+                  {msg.content}
+                </div>
+              ))
+            )}
+
+            {loading && (
+              <div className="message ai loading">
+                <span></span>
+                <span></span>
+                <span></span>
+              </div>
+            )}
           </div>
-        ))
-      )}
 
-  {loading && (
-    <div className="message ai loading">
-      <span></span>
-      <span></span>
-      <span></span>
-    </div>
-  )}
-</div>
+          <div className="input-area">
+            <input
+              type="text"
+              placeholder="Type your message..."
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  sendMessage();
+                }
+              }}
+            />
 
-        <div className="input-area">
-          <input
-            type="text"
-            placeholder="Type your message..."
-            value={message}
-            onChange={(e) => setMessage(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                sendMessage();
-              }
-            }}
-          />
-
-          <button onClick={sendMessage}>
-            Send
-          </button>
+            <button onClick={sendMessage}>Send</button>
+          </div>
         </div>
       </div>
-    </div>
+
+      {showSettings && (
+        <div
+          className="settings-overlay"
+          onClick={() => setShowSettings(false)}
+        >
+          <div
+            className="settings-modal"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2>⚙️ Settings</h2>
+
+            <label className="temperature-label">
+              Model Temperature
+            </label>
+
+            <input
+              type="range"
+              min="0"
+              max="2"
+              step="0.1"
+              value={temperature}
+              onChange={(e) =>
+                setTemperature(Number(e.target.value))
+              }
+            />
+
+            <p className="temperature-value">
+              {temperature.toFixed(1)}
+            </p>
+
+            <small className="temperature-info">
+              Lower values make the AI more focused and deterministic.
+              <br />
+              Higher values make the AI more creative and diverse.
+            </small>
+
+            <div className="settings-buttons">
+              <button
+                onClick={() => setShowSettings(false)}
+              >
+                Cancel
+              </button>
+
+              <button
+                onClick={saveSettings}
+              >
+                Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 

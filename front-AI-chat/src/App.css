@@ -97,7 +97,8 @@ h1 {
   gap: 10px;
 }
 
-input {
+/* Only the chat input */
+.input-area input {
   flex: 1;
 
   padding: 14px;
@@ -129,17 +130,157 @@ button:hover {
   background: #1d4ed8;
 }
 
+
+/* ===========================
+   Settings Button
+=========================== */
+
+.settings-btn {
+  position: fixed;
+
+  top: 20px;
+  left: 20px;
+
+  width: 45px;
+  height: 45px;
+
+  padding: 0;
+
+  border-radius: 50%;
+
+  background: #2563eb;
+
+  color: white;
+
+  font-size: 22px;
+
+  display: flex;
+  justify-content: center;
+  align-items: center;
+
+  cursor: pointer;
+
+  z-index: 10000;
+}
+
+.settings-btn:hover {
+  background: #1d4ed8;
+}
+
+
+/* ===========================
+   Settings Modal
+=========================== */
+
+.settings-overlay {
+  position: fixed;
+
+  inset: 0;
+
+  background: rgba(0, 0, 0, 0.5);
+
+  display: flex;
+
+  justify-content: center;
+
+  align-items: center;
+
+  z-index: 9998;
+}
+
+
+.settings-modal {
+  width: 380px;
+
+  max-width: 90%;
+
+  background: white;
+
+  padding: 25px;
+
+  border-radius: 15px;
+
+  box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+
+  z-index: 9999;
+}
+
+
+.settings-modal h2 {
+  margin-bottom: 20px;
+}
+
+
+.temperature-label {
+  display: block;
+
+  margin-bottom: 15px;
+
+  font-weight: bold;
+}
+
+
+.settings-modal input[type="range"] {
+  width: 100%;
+
+  padding: 0;
+}
+
+
+.temperature-value {
+  text-align: center;
+
+  margin-top: 10px;
+
+  font-size: 22px;
+
+  font-weight: bold;
+}
+
+
+.temperature-info {
+  display: block;
+
+  margin-top: 15px;
+
+  color: #555;
+
+  line-height: 1.5;
+}
+
+
+.settings-buttons {
+  margin-top: 25px;
+
+  display: flex;
+
+  justify-content: flex-end;
+
+  gap: 10px;
+}
+
+
+/* ===========================
+   Loading Animation
+=========================== */
+
 .loading {
   display: flex;
+
   align-items: center;
+
   gap: 6px;
 }
 
 .loading span {
   width: 8px;
+
   height: 8px;
+
   background: #666;
+
   border-radius: 50%;
+
   animation: typing 1.2s infinite ease-in-out;
 }
 
@@ -150,6 +291,7 @@ button:hover {
 .loading span:nth-child(3) {
   animation-delay: 0.4s;
 }
+
 
 @keyframes typing {
   0%, 80%, 100% {
