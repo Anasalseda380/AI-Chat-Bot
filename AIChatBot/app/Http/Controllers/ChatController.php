@@ -16,15 +16,16 @@ class ChatController extends Controller
             'temperature'=>'required|numeric|min:0|max:2',
         ]);
 
-        $response = Http::withHeaders([
+        $response = Http::timeout(30)->withHeaders([
             'Authorization' => 'Bearer ' . env('OPENROUTER_API_KEY'),
             'Content-Type' => 'application/json',
         ])->post('https://openrouter.ai/api/v1/chat/completions', [
 
-            'model' => 'openrouter/free',
+            'model' => 'openai/gpt-oss-20b',
 
             'messages' => $validated['messages'],
-            'temperature'=>$validated['temperature']
+            'temperature'=>$validated['temperature'],
+            'reasoning' => ['enabled' => true,],
 
         ]);
 
@@ -35,8 +36,13 @@ class ChatController extends Controller
             ], 500);
         }
 
+        $data = $response->json();
+
+        $message = $data['choices'][0]['message'];
+
         return response()->json([
-            'reply' => $response['choices'][0]['message']['content'],
+            'reply' => $message['content'],
+            'thinking' => $message['reasoning'] ?? '',
         ]);
     }
 }
