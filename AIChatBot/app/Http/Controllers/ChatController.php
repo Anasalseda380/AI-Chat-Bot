@@ -12,16 +12,16 @@ class ChatController extends Controller
         $validated = $request->validate([
             'messages' => 'required|array|min:1',
             'messages.*.role' => 'required|string',
-            'messages.*.content' => 'required|string',
+            'messages.*.content' => 'required',
             'temperature'=>'required|numeric|min:0|max:2',
         ]);
 
-        $response = Http::timeout(30)->withHeaders([
+        $response = Http::timeout(60)->withHeaders([
             'Authorization' => 'Bearer ' . env('OPENROUTER_API_KEY'),
             'Content-Type' => 'application/json',
         ])->post('https://openrouter.ai/api/v1/chat/completions', [
 
-            'model' => 'openai/gpt-oss-20b',
+            'model' => 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free',
 
             'messages' => $validated['messages'],
             'temperature'=>$validated['temperature'],
@@ -30,6 +30,10 @@ class ChatController extends Controller
         ]);
 
         if (!$response->successful()) {
+            \Log::error('OpenRouter error', [
+                'status' => $response->status(),
+                'body' => $response->body(),
+            ]);
             return response()->json([
                 'reply' => 'Error communicating with the AI service.',
                 'error' => $response->body(),
@@ -38,10 +42,10 @@ class ChatController extends Controller
 
         $data = $response->json();
 
-        $message = $data['choices'][0]['message'];
+        $message = $data['choices'][0]['message'] ?? [];
 
         return response()->json([
-            'reply' => $message['content'],
+            'reply' => $message['content'] ?? '',
             'thinking' => $message['reasoning'] ?? '',
         ]);
     }

@@ -242,11 +242,15 @@ body {
   box-shadow: 0 0 0 3px rgba(37,99,235,.15);
 }
 
-.input-area button {
+/* ===========================
+   Send Button — blue square
+=========================== */
+
+.send-btn {
   height: 56px;
   padding: 0 28px;
   border: none;
-  border-radius: 12px;
+  border-radius: 10px;
   background: #2563eb;
   color: white;
   font-size: 16px;
@@ -255,7 +259,7 @@ body {
   transition: .25s;
 }
 
-.input-area button:hover {
+.send-btn:hover {
   background: #1d4ed8;
 }
 
@@ -410,13 +414,17 @@ body {
   }
 }
 
+/* ===========================
+   Thinking Toggle — transparent square
+=========================== */
+
 .thinking-toggle {
   height: 56px;
   padding: 0 20px;
   border: 2px solid #d1d5db;
-  border-radius: 12px;
-  background: #f3f4f6 !important;
-  color: #6b7280 !important;
+  border-radius: 10px;
+  background: transparent;
+  color: #6b7280;
   cursor: pointer;
   font-size: 15px;
   font-weight: 600;
@@ -428,22 +436,130 @@ body {
 }
 
 .thinking-toggle:hover {
-  background: #e5e7eb !important;
+  background: #f3f4f6;
   border-color: #9ca3af;
 }
 
 .thinking-toggle.active {
-  background: #2563eb !important;
-  color: white !important;
+  background: transparent;
+  color: #2563eb;
   border-color: #2563eb;
 }
 
 .thinking-toggle.active:hover {
-  background: #1d4ed8 !important;
+  background: #eff6ff;
+}
+
+/* ===========================
+   Media Plus Button — transparent square
+=========================== */
+
+.media-menu-wrapper {
+  position: relative;
+}
+
+.media-plus-btn {
+  width: 56px;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid #d1d5db;
+  border-radius: 10px;
+  background: transparent;
+  color: #6b7280;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.media-plus-btn:hover {
+  background: #f3f4f6;
+  border-color: #9ca3af;
+}
+
+.media-menu {
+  position: absolute;
+  bottom: 64px;
+  left: 0;
+  background: #fff;
+  border: 1px solid #e0e0e0;
+  border-radius: 10px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+  padding: 10px 14px;
+  min-width: 180px;
+  z-index: 20;
+}
+
+.media-menu-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: #888;
+  margin: 0 0 6px 0;
+}
+
+.media-menu ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 14px;
+}
+
+.media-menu ul li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 6px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.media-menu ul li:hover {
+  background: #f3f4f6;
 }
 
 
+.attachment-preview-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
+}
 
+.attachment-preview-row.pending {
+  max-width: 1000px;
+  margin: 0 auto 10px auto;
+}
+
+.attachment-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  color: #1d4ed8;
+  padding: 5px 10px;
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+.attachment-chip.sent {
+  background: rgba(255,255,255,0.15);
+  border-color: rgba(255,255,255,0.3);
+  color: inherit;
+}
+
+.attachment-chip button {
+  background: none;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  color: inherit;
+  padding: 0;
+}
 /* ===========================
    Responsive
 =========================== */
@@ -513,8 +629,13 @@ body {
     font-size: 15px;
   }
 
-  .input-area button {
+  .send-btn,
+  .thinking-toggle,
+  .media-plus-btn {
     height: 52px;
+  }
+
+  .send-btn {
     padding: 0 18px;
     font-size: 15px;
   }

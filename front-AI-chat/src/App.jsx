@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import "./App.css";
-import { FiSettings } from "react-icons/fi";
+import { FiSettings, FiPlus, FiX, FiImage, FiVideo, FiMusic } from "react-icons/fi";
 
 function App() {
   const [message, setMessage] = useState("");
@@ -9,32 +9,119 @@ function App() {
   const [showSettings, setShowSettings] = useState(false);
   const [thinkingEnabled, setThinkingEnabled] = useState(false);
   const [expandedThinking, setExpandedThinking] = useState(null);
+  const [showMediaMenu, setShowMediaMenu] = useState(false);
+  const [attachments, setAttachments] = useState([]);
+  const [pendingMediaType, setPendingMediaType] = useState(null);
   const [temperature, setTemperature] = useState(() => {
     const saved = localStorage.getItem("temperature");
     return saved ? Number(saved) : 0.7;
   });
 
   const messagesEndRef = useRef(null);
+  const mediaMenuRef = useRef(null);
+  const fileInputRef = useRef(null);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, loading]);
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (mediaMenuRef.current && !mediaMenuRef.current.contains(e.target)) {
+        setShowMediaMenu(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   const saveSettings = () => {
     localStorage.setItem("temperature", temperature);
     setShowSettings(false);
   };
 
-  const sendMessage = async () => {
-    if (message.trim() === "") return;
+  const acceptFor = (kind) => {
+    if (kind === "image") return "image/*";
+    if (kind === "video") return "video/*";
+    if (kind === "audio") return "audio/*";
+    return "*/*";
+  };
 
-    const userMessage = { role: "user", content: message };
+  const openFilePicker = (kind) => {
+    setPendingMediaType(kind);
+    setShowMediaMenu(false);
+    // wait a tick so accept attr is set before opening
+    setTimeout(() => fileInputRef.current?.click(), 0);
+  };
+
+  const handleFileChange = (e) => {
+    const file = e.target.files[0];
+    if (!file || !pendingMediaType) return;
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      setAttachments((prev) => [
+        ...prev,
+        {
+          id: Date.now() + Math.random(),
+          kind: pendingMediaType,
+          name: file.name,
+          dataUrl: reader.result,
+        },
+      ]);
+    };
+    reader.readAsDataURL(file);
+    e.target.value = "";
+  };
+
+  const removeAttachment = (id) => {
+    setAttachments((prev) => prev.filter((a) => a.id !== id));
+  };
+
+  const buildUserContent = () => {
+    if (attachments.length === 0) return message;
+
+    const parts = [];
+    if (message.trim() !== "") {
+      parts.push({ type: "text", text: message });
+    }
+    attachments.forEach((a) => {
+      if (a.kind === "image") {
+        parts.push({ type: "image_url", image_url: { url: a.dataUrl } });
+      } else if (a.kind === "video") {
+        parts.push({ type: "video_url", video_url: { url: a.dataUrl } });
+      } else if (a.kind === "audio") {
+        const base64 = a.dataUrl.split(",")[1];
+        const format = a.name.split(".").pop().toLowerCase();
+        parts.push({ type: "input_audio", input_audio: { data: base64, format } });
+      }
+    });
+    return parts;
+  };
+
+  const sendMessage = async () => {
+    if (message.trim() === "" && attachments.length === 0) return;
+
+    const userMessage = {
+      role: "user",
+      content: buildUserContent(),
+      display: message,
+      attachmentsPreview: attachments,
+    };
+
     const conversation = [...messages, userMessage];
     setMessages(conversation);
     setMessage("");
+    setAttachments([]);
     setLoading(true);
 
     const wantsThinking = thinkingEnabled; // snapshot toggle at send time
+
+    // strip UI-only fields before sending to backend
+    const apiMessages = conversation.map((m) => ({
+      role: m.role,
+      content: m.content,
+    }));
 
     try {
       const response = await fetch(
@@ -46,7 +133,7 @@ function App() {
             Accept: "application/json",
           },
           body: JSON.stringify({
-            messages: conversation,
+            messages: apiMessages,
             temperature: temperature,
           }),
         }
@@ -60,12 +147,16 @@ function App() {
         {
           role: "assistant",
           content: data.reply ?? "No response received from AI.",
+          display: data.reply ?? "No response received from AI.",
           thinking: data.thinking || "",
           showThinking: wantsThinking,
         },
       ]);
     } catch (error) {
-      setMessages([...conversation, { role: "assistant", content: "Unable to connect to the server." }]);
+      setMessages([
+        ...conversation,
+        { role: "assistant", content: "Unable to connect to the server.", display: "Unable to connect to the server." },
+      ]);
     } finally {
       setLoading(false);
     }
@@ -99,7 +190,6 @@ function App() {
           </div>
         ) : (
           messages.map((msg, index) => {
-            console.log("Message:", msg);
             return (
               <div key={index} className={`message-row ${msg.role === "user" ? "user-row" : "ai-row"}`}>
                 <div className={`message ${msg.role === "user" ? "user" : "ai"}`}>
@@ -116,7 +206,21 @@ function App() {
                       )}
                     </>
                   )}
-                  <div>{msg.content}</div>
+
+                  {msg.attachmentsPreview && msg.attachmentsPreview.length > 0 && (
+                    <div className="attachment-preview-row">
+                      {msg.attachmentsPreview.map((a) => (
+                        <div key={a.id} className="attachment-chip sent">
+                          {a.kind === "image" && <FiImage size={14} />}
+                          {a.kind === "video" && <FiVideo size={14} />}
+                          {a.kind === "audio" && <FiMusic size={14} />}
+                          <span>{a.name}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  <div>{msg.display}</div>
                 </div>
               </div>
             );
@@ -135,7 +239,58 @@ function App() {
       </main>
 
       <footer className="input-container">
+        {attachments.length > 0 && (
+          <div className="attachment-preview-row pending">
+            {attachments.map((a) => (
+              <div key={a.id} className="attachment-chip">
+                {a.kind === "image" && <FiImage size={14} />}
+                {a.kind === "video" && <FiVideo size={14} />}
+                {a.kind === "audio" && <FiMusic size={14} />}
+                <span>{a.name}</span>
+                <button onClick={() => removeAttachment(a.id)} type="button">
+                  <FiX size={14} />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
         <div className="input-area">
+          <div className="media-menu-wrapper" ref={mediaMenuRef}>
+            <button
+              className="media-plus-btn"
+              onClick={() => setShowMediaMenu(!showMediaMenu)}
+              type="button"
+            >
+              <FiPlus size={20} />
+            </button>
+
+            {showMediaMenu && (
+              <div className="media-menu">
+                <p className="media-menu-title">Attach media</p>
+                <ul>
+                  <li onClick={() => openFilePicker("image")}>
+                    <FiImage size={15} /> Image (jpg, png, etc.)
+                  </li>
+                  <li onClick={() => openFilePicker("video")}>
+                    <FiVideo size={15} /> Video
+                  </li>
+                  <li onClick={() => openFilePicker("audio")}>
+                    <FiMusic size={15} /> Audio
+                  </li>
+                </ul>
+              </div>
+            )}
+          </div>
+
+          <input
+            type="file"
+            ref={fileInputRef}
+            style={{ display: "none" }}
+            accept={acceptFor(pendingMediaType)}
+            onChange={handleFileChange}
+          />
+
           <textarea
             rows="1"
             placeholder="Message AI..."
@@ -154,7 +309,7 @@ function App() {
           >
             🧠 Think
           </button>
-          <button onClick={sendMessage}>Send</button>
+          <button className="send-btn" onClick={sendMessage}>Send</button>
         </div>
       </footer>
 
