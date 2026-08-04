@@ -13,40 +13,34 @@ class ChatController extends Controller
             'messages' => 'required|array|min:1',
             'messages.*.role' => 'required|string',
             'messages.*.content' => 'required',
-            'temperature'=>'required|numeric|min:0|max:2',
+            'temperature' => 'required|numeric|min:0|max:2',
         ]);
 
-        $response = Http::timeout(60)->withHeaders([
-            'Authorization' => 'Bearer ' . env('OPENROUTER_API_KEY'),
-            'Content-Type' => 'application/json',
-        ])->post('https://openrouter.ai/api/v1/chat/completions', [
+        return response()->stream(function () use ($validated) {
+            $response = Http::withOptions(['stream' => true])->timeout(0)
+                ->withHeaders([
+                    'Authorization' => 'Bearer ' . env('OPENROUTER_API_KEY'),
+                    'Content-Type' => 'application/json',])
+                    
+                ->post('https://openrouter.ai/api/v1/chat/completions', [
+                    'model' => 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free',
+                    'messages' => $validated['messages'],
+                    'temperature' => $validated['temperature'],
+                    'reasoning' => ['enabled' => true],
+                    'stream' => true,
+                ]);
 
-            'model' => 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free',
+            $body = $response->toPsrResponse()->getBody();
 
-            'messages' => $validated['messages'],
-            'temperature'=>$validated['temperature'],
-            'reasoning' => ['enabled' => true,],
-
-        ]);
-
-        if (!$response->successful()) {
-            \Log::error('OpenRouter error', [
-                'status' => $response->status(),
-                'body' => $response->body(),
-            ]);
-            return response()->json([
-                'reply' => 'Error communicating with the AI service.',
-                'error' => $response->body(),
-            ], 500);
-        }
-
-        $data = $response->json();
-
-        $message = $data['choices'][0]['message'] ?? [];
-
-        return response()->json([
-            'reply' => $message['content'] ?? '',
-            'thinking' => $message['reasoning'] ?? '',
+            while (!$body->eof()) {
+                echo $body->read(1024);
+                @ob_flush();
+                @flush();
+            }
+        }, 200, [
+            'Content-Type' => 'text/event-stream',
+            'Cache-Control' => 'no-cache',
+            'X-Accel-Buffering' => 'no',
         ]);
     }
 }

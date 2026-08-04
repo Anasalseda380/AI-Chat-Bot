@@ -50,7 +50,6 @@ function App() {
   const openFilePicker = (kind) => {
     setPendingMediaType(kind);
     setShowMediaMenu(false);
-    // wait a tick so accept attr is set before opening
     setTimeout(() => fileInputRef.current?.click(), 0);
   };
 
@@ -110,54 +109,91 @@ function App() {
     };
 
     const conversation = [...messages, userMessage];
-    setMessages(conversation);
+    const wantsThinking = thinkingEnabled;
+    const assistantIndex = conversation.length;
+
+    setMessages([
+      ...conversation,
+      { role: "assistant", content: "", display: "", thinking: "", showThinking: wantsThinking, streaming: true },
+    ]);
     setMessage("");
     setAttachments([]);
     setLoading(true);
 
-    const wantsThinking = thinkingEnabled; // snapshot toggle at send time
-
-    // strip UI-only fields before sending to backend
-    const apiMessages = conversation.map((m) => ({
-      role: m.role,
-      content: m.content,
-    }));
+    const apiMessages = conversation.map((m) => ({ role: m.role, content: m.content }));
 
     try {
-      const response = await fetch(
-        "https://ai-chatbot-backend-60lr.onrender.com/api/chat",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Accept: "application/json",
-          },
-          body: JSON.stringify({
-            messages: apiMessages,
-            temperature: temperature,
-          }),
-        }
-      );
-
-      const data = await response.json();
-      console.log("API Response:", data);
-
-      setMessages([
-        ...conversation,
-        {
-          role: "assistant",
-          content: data.reply ?? "No response received from AI.",
-          display: data.reply ?? "No response received from AI.",
-          thinking: data.thinking || "",
-          showThinking: wantsThinking,
+      const response = await fetch("http://127.0.0.1:8000/api/chat", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "text/event-stream",
         },
-      ]);
+        body: JSON.stringify({ messages: apiMessages, temperature }),
+      });
+
+      if (!response.body) throw new Error("No stream body");
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let accumulatedContent = "";
+      let accumulatedThinking = "";
+
+      setLoading(false);
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const chunks = buffer.split("\n\n");
+        buffer = chunks.pop();
+
+        for (const chunk of chunks) {
+          const trimmed = chunk.trim();
+          if (!trimmed.startsWith("data: ")) continue;
+          const payload = trimmed.slice(6);
+          if (payload === "[DONE]") continue;
+
+          try {
+            const parsed = JSON.parse(payload);
+            const delta = parsed.choices?.[0]?.delta;
+
+            if (delta?.content) accumulatedContent += delta.content;
+            if (delta?.reasoning) accumulatedThinking += delta.reasoning;
+
+            setMessages((prev) => {
+              const updated = [...prev];
+              updated[assistantIndex] = {
+                ...updated[assistantIndex],
+                content: accumulatedContent,
+                display: accumulatedContent,
+                thinking: accumulatedThinking,
+              };
+              return updated;
+            });
+          } catch (err) {
+            // skip malformed/partial JSON chunk
+          }
+        }
+      }
+
+      setMessages((prev) => {
+        const updated = [...prev];
+        updated[assistantIndex] = { ...updated[assistantIndex], streaming: false };
+        return updated;
+      });
     } catch (error) {
-      setMessages([
-        ...conversation,
-        { role: "assistant", content: "Unable to connect to the server.", display: "Unable to connect to the server." },
-      ]);
-    } finally {
+      setMessages((prev) => {
+        const updated = [...prev];
+        updated[assistantIndex] = {
+          role: "assistant",
+          content: "Unable to connect to the server.",
+          display: "Unable to connect to the server.",
+        };
+        return updated;
+      });
       setLoading(false);
     }
   };
