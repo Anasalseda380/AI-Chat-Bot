@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import "./App.css";
-import { FiSettings, FiPlus, FiX, FiImage, FiVideo, FiMusic } from "react-icons/fi";
+import { FiSettings, FiPlus, FiX, FiImage, FiVideo, FiMusic, FiSquare } from "react-icons/fi";
 
 function App() {
   const [message, setMessage] = useState("");
@@ -12,6 +12,7 @@ function App() {
   const [showMediaMenu, setShowMediaMenu] = useState(false);
   const [attachments, setAttachments] = useState([]);
   const [pendingMediaType, setPendingMediaType] = useState(null);
+  const [isStreaming, setIsStreaming] = useState(false);
   const [temperature, setTemperature] = useState(() => {
     const saved = localStorage.getItem("temperature");
     return saved ? Number(saved) : 0.7;
@@ -20,6 +21,7 @@ function App() {
   const messagesEndRef = useRef(null);
   const mediaMenuRef = useRef(null);
   const fileInputRef = useRef(null);
+  const abortControllerRef = useRef(null);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -98,6 +100,10 @@ function App() {
     return parts;
   };
 
+  const stopResponse = () => {
+    abortControllerRef.current?.abort();
+  };
+
   const sendMessage = async () => {
     if (message.trim() === "" && attachments.length === 0) return;
 
@@ -119,6 +125,10 @@ function App() {
     setMessage("");
     setAttachments([]);
     setLoading(true);
+    setIsStreaming(true);
+
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
 
     const apiMessages = conversation.map((m) => ({ role: m.role, content: m.content }));
 
@@ -130,6 +140,7 @@ function App() {
           Accept: "text/event-stream",
         },
         body: JSON.stringify({ messages: apiMessages, temperature }),
+        signal: controller.signal,
       });
 
       if (!response.body) throw new Error("No stream body");
@@ -185,16 +196,27 @@ function App() {
         return updated;
       });
     } catch (error) {
-      setMessages((prev) => {
-        const updated = [...prev];
-        updated[assistantIndex] = {
-          role: "assistant",
-          content: "Unable to connect to the server.",
-          display: "Unable to connect to the server.",
-        };
-        return updated;
-      });
+      if (error.name === "AbortError") {
+        setMessages((prev) => {
+          const updated = [...prev];
+          updated[assistantIndex] = { ...updated[assistantIndex], streaming: false };
+          return updated;
+        });
+      } else {
+        setMessages((prev) => {
+          const updated = [...prev];
+          updated[assistantIndex] = {
+            role: "assistant",
+            content: "Unable to connect to the server.",
+            display: "Unable to connect to the server.",
+          };
+          return updated;
+        });
+      }
       setLoading(false);
+    } finally {
+      setIsStreaming(false);
+      abortControllerRef.current = null;
     }
   };
 
@@ -327,18 +349,26 @@ function App() {
             onChange={handleFileChange}
           />
 
-          <textarea
-            rows="1"
-            placeholder="Message AI..."
-            value={message}
-            onChange={(e) => setMessage(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                sendMessage();
-              }
-            }}
-          />
+          <div className="textarea-wrapper">
+            <textarea
+              rows="1"
+              placeholder="Message AI..."
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  sendMessage();
+                }
+              }}
+            />
+            {isStreaming && (
+              <button className="stop-btn" onClick={stopResponse} type="button">
+                <FiSquare size={14} />
+              </button>
+            )}
+          </div>
+
           <button
             className={`thinking-toggle ${thinkingEnabled ? 'active' : ''}`}
             onClick={() => setThinkingEnabled(!thinkingEnabled)}

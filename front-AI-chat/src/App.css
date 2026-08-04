@@ -223,18 +223,45 @@ body {
   gap: 14px;
 }
 
-.input-area textarea {
+.textarea-wrapper {
+  position: relative;
   flex: 1;
+}
+
+.input-area textarea {
+  width: 100%;
   resize: none;
   min-height: 56px;
   max-height: 180px;
   padding: 16px;
+  padding-right: 54px;
   border: 1px solid #d1d5db;
   border-radius: 14px;
   outline: none;
   font-size: 16px;
   transition: .25s;
   overflow-y: auto;
+}
+
+.stop-btn {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  border: none;
+  background: #ef4444;
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.stop-btn:hover {
+  background: #dc2626;
 }
 
 .input-area textarea:focus {
@@ -626,7 +653,15 @@ body {
   .input-area textarea {
     min-height: 52px;
     padding: 14px;
+    padding-right: 48px;
     font-size: 15px;
+  }
+
+  .stop-btn {
+    width: 30px;
+    height: 30px;
+    right: 8px;
+    bottom: 8px;
   }
 
   .send-btn,

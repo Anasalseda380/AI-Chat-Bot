@@ -32,10 +32,18 @@ class ChatController extends Controller
 
             $body = $response->toPsrResponse()->getBody();
 
-            while (!$body->eof()) {
+           while (!$body->eof()) {
+                if (connection_aborted()) {
+                    break;
+                }
+
                 echo $body->read(1024);
                 @ob_flush();
                 @flush();
+            }
+
+            if (!$body->eof()) {
+                $body->close();
             }
         }, 200, [
             'Content-Type' => 'text/event-stream',
