@@ -42,9 +42,7 @@ class ChatController extends Controller
                 @flush();
             }
 
-            if (!$body->eof()) {
-                $body->close();
-            }
+            $body->close();
         }, 200, [
             'Content-Type' => 'text/event-stream',
             'Cache-Control' => 'no-cache',

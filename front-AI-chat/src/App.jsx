@@ -22,6 +22,7 @@ function App() {
   const mediaMenuRef = useRef(null);
   const fileInputRef = useRef(null);
   const abortControllerRef = useRef(null);
+  const currentRequestIdRef = useRef(0);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -101,11 +102,42 @@ function App() {
   };
 
   const stopResponse = () => {
-    abortControllerRef.current?.abort();
-  };
+  // Invalidate the current request
+  currentRequestIdRef.current++;
+
+  if (abortControllerRef.current) {
+    abortControllerRef.current.abort();
+    abortControllerRef.current = null;
+  }
+
+  setIsStreaming(false);
+  setLoading(false);
+
+  // Mark the last assistant message as finished
+  setMessages((prev) => {
+    if (prev.length === 0) return prev;
+
+    const updated = [...prev];
+    const last = updated[updated.length - 1];
+
+    if (last.role === "assistant" && last.streaming) {
+      updated[updated.length - 1] = {
+        ...last,
+        streaming: false,
+      };
+    }
+
+    return updated;
+  });
+};
 
   const sendMessage = async () => {
     if (message.trim() === "" && attachments.length === 0) return;
+    if (isStreaming) return;
+
+    // Increment request ID to track this specific request
+    currentRequestIdRef.current += 1;
+    const currentRequestId = currentRequestIdRef.current;
 
     const userMessage = {
       role: "user",
@@ -142,6 +174,16 @@ function App() {
         body: JSON.stringify({ messages: apiMessages, temperature }),
         signal: controller.signal,
       });
+      
+      if (controller.signal.aborted) {
+        return;
+      }
+
+      // Check if this request was superseded
+      if (currentRequestId !== currentRequestIdRef.current) {
+        controller.abort();
+        return;
+      }
 
       if (!response.body) throw new Error("No stream body");
 
@@ -154,14 +196,32 @@ function App() {
       setLoading(false);
 
       while (true) {
+        // Check if this request was superseded
+        if (currentRequestId !== currentRequestIdRef.current) {
+          controller.abort();
+          break;
+        }
+
         const { done, value } = await reader.read();
         if (done) break;
+
+        // Check if this request was superseded
+        if (currentRequestId !== currentRequestIdRef.current) {
+          controller.abort();
+          break;
+        }
 
         buffer += decoder.decode(value, { stream: true });
         const chunks = buffer.split("\n\n");
         buffer = chunks.pop();
 
         for (const chunk of chunks) {
+          // Check if this request was superseded
+          if (currentRequestId !== currentRequestIdRef.current) {
+            controller.abort();
+            break;
+          }
+
           const trimmed = chunk.trim();
           if (!trimmed.startsWith("data: ")) continue;
           const payload = trimmed.slice(6);
@@ -174,35 +234,42 @@ function App() {
             if (delta?.content) accumulatedContent += delta.content;
             if (delta?.reasoning) accumulatedThinking += delta.reasoning;
 
-            setMessages((prev) => {
-              const updated = [...prev];
-              updated[assistantIndex] = {
-                ...updated[assistantIndex],
-                content: accumulatedContent,
-                display: accumulatedContent,
-                thinking: accumulatedThinking,
-              };
-              return updated;
-            });
+            // Only update if this is still the current request
+            if (currentRequestId === currentRequestIdRef.current) {
+              setMessages((prev) => {
+                const updated = [...prev];
+                updated[assistantIndex] = {
+                  ...updated[assistantIndex],
+                  content: accumulatedContent,
+                  display: accumulatedContent,
+                  thinking: accumulatedThinking,
+                };
+                return updated;
+              });
+            }
           } catch (err) {
             // skip malformed/partial JSON chunk
           }
         }
       }
 
-      setMessages((prev) => {
-        const updated = [...prev];
-        updated[assistantIndex] = { ...updated[assistantIndex], streaming: false };
-        return updated;
-      });
-    } catch (error) {
-      if (error.name === "AbortError") {
+      // Only update if this is still the current request
+      if (currentRequestId === currentRequestIdRef.current && !controller.signal.aborted) {
         setMessages((prev) => {
           const updated = [...prev];
           updated[assistantIndex] = { ...updated[assistantIndex], streaming: false };
           return updated;
         });
-      } else {
+      }
+    } catch (error) {
+        if (error.name === "AbortError") {
+          return;
+        }
+
+        if (currentRequestId !== currentRequestIdRef.current) {
+          return;
+        }
+
         setMessages((prev) => {
           const updated = [...prev];
           updated[assistantIndex] = {
@@ -212,11 +279,15 @@ function App() {
           };
           return updated;
         });
+      } finally {
+      if (currentRequestId === currentRequestIdRef.current) {
+        setLoading(false);
+        setIsStreaming(false);
       }
-      setLoading(false);
-    } finally {
-      setIsStreaming(false);
-      abortControllerRef.current = null;
+
+      if (abortControllerRef.current === controller) {
+        abortControllerRef.current = null;
+      }
     }
   };
 
