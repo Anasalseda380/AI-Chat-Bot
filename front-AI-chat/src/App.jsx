@@ -121,6 +121,11 @@ function App() {
     const last = updated[updated.length - 1];
 
     if (last.role === "assistant" && last.streaming) {
+      // FIX: If the message is empty, remove it entirely to avoid breaking history
+      if (!last.content && !last.thinking) {
+        return updated.slice(0, -1);
+      }
+      
       updated[updated.length - 1] = {
         ...last,
         streaming: false,
@@ -133,7 +138,7 @@ function App() {
 
   const sendMessage = async () => {
     if (message.trim() === "" && attachments.length === 0) return;
-    if (isStreaming) return;
+  if (isStreaming) return;
 
     // Increment request ID to track this specific request
     currentRequestIdRef.current += 1;
@@ -162,8 +167,9 @@ function App() {
     const controller = new AbortController();
     abortControllerRef.current = controller;
 
-    const apiMessages = conversation.map((m) => ({ role: m.role, content: m.content }));
-
+    const apiMessages = conversation
+    .filter(m => m.content !== "" || m.role === "user")
+    .map((m) => ({ role: m.role, content: m.content }));
     try {
       const response = await fetch("https://ai-chatbot-backend-60lr.onrender.com/api/chat", {
         method: "POST",

@@ -12,7 +12,7 @@ class ChatController extends Controller
         $validated = $request->validate([
             'messages' => 'required|array|min:1',
             'messages.*.role' => 'required|string',
-            'messages.*.content' => 'required',
+            'messages.*.content' => 'present',
             'temperature' => 'required|numeric|min:0|max:2',
         ]);
 
