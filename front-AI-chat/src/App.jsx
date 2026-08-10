@@ -171,7 +171,7 @@ function App() {
     .filter(m => m.content !== "" || m.role === "user")
     .map((m) => ({ role: m.role, content: m.content }));
     try {
-      const response = await fetch("https://ai-chatbot-backend-60lr.onrender.com/api/chat", {
+      const response = await fetch("http://localhost:8000/api/chat", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -235,6 +235,14 @@ function App() {
 
           try {
             const parsed = JSON.parse(payload);
+            if (parsed.tool_status) {
+              setMessages((prev) => {
+                const updated = [...prev];
+                updated[assistantIndex] = { ...updated[assistantIndex], toolStatus: parsed.tool_status };
+                return updated;
+              });
+              continue; // no delta to process on this event
+            }
             const delta = parsed.choices?.[0]?.delta;
 
             if (delta?.content) accumulatedContent += delta.content;
