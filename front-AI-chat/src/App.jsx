@@ -171,7 +171,7 @@ function App() {
     .filter(m => m.content !== "" || m.role === "user")
     .map((m) => ({ role: m.role, content: m.content }));
     try {
-      const response = await fetch("http://localhost:8000/api/chat", {
+      const response = await fetch("https://ai-chatbot-backend-60lr.onrender.com/api/chat", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
