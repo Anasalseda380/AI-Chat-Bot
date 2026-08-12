@@ -63,8 +63,15 @@ class ChatController extends Controller
 
                 $delta = json_decode(substr($line, 6), true)['choices'][0]['delta'] ?? [];
 
-                if (!empty($delta['content']) || !empty($delta['reasoning'])) {
-                    echo $line . "\n\n"; // forward exactly as before — content/reasoning untouched
+                // FIX: use isset()/!== '' instead of !empty() — empty("0") is true in PHP,
+                // which was silently dropping any delta chunk whose content/reasoning
+                // was the single character "0" (e.g. streaming "2026" digit-by-digit
+                // could lose the "0" and render as "226").
+                $hasContent = isset($delta['content']) && $delta['content'] !== '';
+                $hasReasoning = isset($delta['reasoning']) && $delta['reasoning'] !== '';
+
+                if ($hasContent || $hasReasoning) {
+                    echo $line . "\n\n"; // forwarded exactly as received — content/reasoning untouched
                     @ob_flush();
                     @flush();
                 }
