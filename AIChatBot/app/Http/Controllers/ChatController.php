@@ -163,7 +163,7 @@ class ChatController extends Controller
         ])->json()['current_weather'] ?? ['error' => 'Weather unavailable'];
     }
 
-        private function webSearch(string $query): array
+    private function webSearch(string $query): array
     {
         $response = Http::withHeaders([
             'X-API-KEY' => env('SERPER_API_KEY'),
@@ -173,9 +173,10 @@ class ChatController extends Controller
         ]);
 
         return [
+            'query' => $query,
             'status' => $response->status(),
             'successful' => $response->successful(),
-            'body' => $response->json(),
+            'response' => $response->json(),
         ];
     }
 }
