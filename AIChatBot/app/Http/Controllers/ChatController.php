@@ -126,7 +126,7 @@ class ChatController extends Controller
         return [
             ['type' => 'function', 'function' => [
                 'name' => 'web_search',
-                'description' => 'Search the web for current information.',
+                'description' => 'Search the web for information.',
                 'parameters' => ['type' => 'object', 'properties' => ['query' => ['type' => 'string']], 'required' => ['query']],
             ]],
             ['type' => 'function', 'function' => [
