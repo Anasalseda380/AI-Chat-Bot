@@ -63,8 +63,15 @@ class ChatController extends Controller
 
                 $delta = json_decode(substr($line, 6), true)['choices'][0]['delta'] ?? [];
 
-                if (!empty($delta['content']) || !empty($delta['reasoning'])) {
-                    echo $line . "\n\n"; // forward exactly as before — content/reasoning untouched
+                // FIX: use isset()/!== '' instead of !empty() — empty("0") is true in PHP,
+                // which silently dropped any delta chunk whose content/reasoning was the
+                // single character "0" (e.g. streaming "2026" digit-by-digit could lose
+                // the "0" and render as "226").
+                $hasContent = isset($delta['content']) && $delta['content'] !== '';
+                $hasReasoning = isset($delta['reasoning']) && $delta['reasoning'] !== '';
+
+                if ($hasContent || $hasReasoning) {
+                    echo $line . "\n\n"; // forwarded exactly as received — content/reasoning untouched
                     @ob_flush();
                     @flush();
                 }
@@ -103,6 +110,13 @@ class ChatController extends Controller
             @flush();
 
             $args = json_decode($t['function']['arguments'], true) ?? [];
+
+            \Log::info('Tool call received', [
+                'name' => $t['function']['name'],
+                'raw_arguments' => $t['function']['arguments'],
+                'decoded_args' => $args,
+            ]);
+
             $result = match ($t['function']['name']) {
                 'web_search' => $this->webSearch($args['query'] ?? ''),
                 'get_weather' => $this->weather($args['location'] ?? ''),
@@ -126,7 +140,7 @@ class ChatController extends Controller
         return [
             ['type' => 'function', 'function' => [
                 'name' => 'web_search',
-                'description' => 'Search the web for information.',
+                'description' => 'Search the web for current information.',
                 'parameters' => ['type' => 'object', 'properties' => ['query' => ['type' => 'string']], 'required' => ['query']],
             ]],
             ['type' => 'function', 'function' => [
@@ -165,18 +179,53 @@ class ChatController extends Controller
 
     private function webSearch(string $query): array
     {
-        $response = Http::withHeaders([
-            'X-API-KEY' => env('SERPER_API_KEY'),
-            'Content-Type' => 'application/json',
-        ])->post('https://google.serper.dev/search', [
-            'q' => $query,
-        ]);
+        if (trim($query) === '') {
+            \Log::warning('webSearch: received empty query from model');
+            return ['error' => 'Empty search query received from model'];
+        }
 
-        return [
-            'query' => $query,
-            'status' => $response->status(),
-            'successful' => $response->successful(),
-            'response' => $response->json(),
-        ];
+        $apiKey = env('SERPER_API_KEY');
+        if (empty($apiKey)) {
+            \Log::error('webSearch: SERPER_API_KEY is not set (check .env and run php artisan config:clear)');
+            return ['error' => 'Search is not configured (missing API key)'];
+        }
+
+        try {
+            $response = Http::withHeaders([
+                'X-API-KEY' => $apiKey,
+                'Content-Type' => 'application/json',
+            ])->timeout(15)->post('https://google.serper.dev/search', [
+                'q' => $query,
+            ]);
+
+            if ($response->failed()) {
+                \Log::error('webSearch: Serper request failed', [
+                    'status' => $response->status(),
+                    'body' => $response->body(),
+                ]);
+                return ['error' => "Search request failed (HTTP {$response->status()})"];
+            }
+
+            $data = $response->json();
+
+            // Serper sometimes puts the answer in answerBox/knowledgeGraph instead of organic
+            $results = $data['organic'] ?? [];
+            if (empty($results) && !empty($data['answerBox'])) {
+                $results = [$data['answerBox']];
+            }
+            if (empty($results) && !empty($data['knowledgeGraph'])) {
+                $results = [$data['knowledgeGraph']];
+            }
+
+            if (empty($results)) {
+                \Log::warning('webSearch: no results for query', ['query' => $query, 'raw' => $data]);
+                return ['error' => 'No search results found', 'query' => $query];
+            }
+
+            return $results;
+        } catch (\Throwable $e) {
+            \Log::error('webSearch: exception', ['message' => $e->getMessage()]);
+            return ['error' => 'Search request threw an exception: ' . $e->getMessage()];
+        }
     }
 }
