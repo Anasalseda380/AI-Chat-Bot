@@ -163,10 +163,19 @@ class ChatController extends Controller
         ])->json()['current_weather'] ?? ['error' => 'Weather unavailable'];
     }
 
-    private function webSearch(string $query): array
+        private function webSearch(string $query): array
     {
-        return Http::withHeaders(['X-API-KEY' => env('SERPER_API_KEY')])
-            ->post('https://google.serper.dev/search', ['q' => $query])
-            ->json()['organic'] ?? [];
+        $response = Http::withHeaders([
+            'X-API-KEY' => env('SERPER_API_KEY'),
+            'Content-Type' => 'application/json',
+        ])->post('https://google.serper.dev/search', [
+            'q' => $query,
+        ]);
+
+        return [
+            'status' => $response->status(),
+            'successful' => $response->successful(),
+            'body' => $response->json(),
+        ];
     }
 }
