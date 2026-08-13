@@ -186,7 +186,6 @@ body {
   border-radius: 18px;
   font-size: 16px;
   line-height: 1.6;
-  white-space: pre-wrap;
   word-break: break-word;
   animation: fadeIn .25s ease;
 }
@@ -195,6 +194,7 @@ body {
   background: #2563eb;
   color: white;
   border-bottom-right-radius: 6px;
+  white-space: pre-wrap;
 }
 
 .ai {

@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import "./App.css";
 import { FiSettings, FiPlus, FiX, FiImage, FiVideo, FiMusic, FiSquare } from "react-icons/fi";
+import ReactMarkdown from "react-markdown";
 
 function App() {
   const [message, setMessage] = useState("");
@@ -34,6 +35,7 @@ function App() {
         setShowMediaMenu(false);
       }
     };
+
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
@@ -72,6 +74,7 @@ function App() {
         },
       ]);
     };
+
     reader.readAsDataURL(file);
     e.target.value = "";
   };
@@ -84,9 +87,11 @@ function App() {
     if (attachments.length === 0) return message;
 
     const parts = [];
+
     if (message.trim() !== "") {
       parts.push({ type: "text", text: message });
     }
+
     attachments.forEach((a) => {
       if (a.kind === "image") {
         parts.push({ type: "image_url", image_url: { url: a.dataUrl } });
@@ -95,50 +100,55 @@ function App() {
       } else if (a.kind === "audio") {
         const base64 = a.dataUrl.split(",")[1];
         const format = a.name.split(".").pop().toLowerCase();
-        parts.push({ type: "input_audio", input_audio: { data: base64, format } });
+
+        parts.push({
+          type: "input_audio",
+          input_audio: { data: base64, format },
+        });
       }
     });
+
     return parts;
   };
 
   const stopResponse = () => {
-  // Invalidate the current request
-  currentRequestIdRef.current++;
+    // Invalidate the current request
+    currentRequestIdRef.current++;
 
-  if (abortControllerRef.current) {
-    abortControllerRef.current.abort();
-    abortControllerRef.current = null;
-  }
-
-  setIsStreaming(false);
-  setLoading(false);
-
-  // Mark the last assistant message as finished
-  setMessages((prev) => {
-    if (prev.length === 0) return prev;
-
-    const updated = [...prev];
-    const last = updated[updated.length - 1];
-
-    if (last.role === "assistant" && last.streaming) {
-      // FIX: If the message is empty, remove it entirely to avoid breaking history
-      if (!last.content && !last.thinking) {
-        return updated.slice(0, -1);
-      }
-      
-      updated[updated.length - 1] = {
-        ...last,
-        streaming: false,
-      };
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
     }
 
-    return updated;
-  });
-};
+    setIsStreaming(false);
+    setLoading(false);
+
+    // Mark the last assistant message as finished
+    setMessages((prev) => {
+      if (prev.length === 0) return prev;
+
+      const updated = [...prev];
+      const last = updated[updated.length - 1];
+
+      if (last.role === "assistant" && last.streaming) {
+        // FIX: If the message is empty, remove it entirely to avoid breaking history
+        if (!last.content && !last.thinking) {
+          return updated.slice(0, -1);
+        }
+
+        updated[updated.length - 1] = {
+          ...last,
+          streaming: false,
+        };
+      }
+
+      return updated;
+    });
+  };
 
   const sendMessage = async () => {
     if (message.trim() === "" && attachments.length === 0) return;
-  if (isStreaming) return;
+    if (isStreaming) return;
 
     // Increment request ID to track this specific request
     currentRequestIdRef.current += 1;
@@ -157,8 +167,16 @@ function App() {
 
     setMessages([
       ...conversation,
-      { role: "assistant", content: "", display: "", thinking: "", showThinking: wantsThinking, streaming: true },
+      {
+        role: "assistant",
+        content: "",
+        display: "",
+        thinking: "",
+        showThinking: wantsThinking,
+        streaming: true,
+      },
     ]);
+
     setMessage("");
     setAttachments([]);
     setLoading(true);
@@ -168,10 +186,11 @@ function App() {
     abortControllerRef.current = controller;
 
     const apiMessages = conversation
-    .filter(m => m.content !== "" || m.role === "user")
-    .map((m) => ({ role: m.role, content: m.content }));
+      .filter((m) => m.content !== "" || m.role === "user")
+      .map((m) => ({ role: m.role, content: m.content }));
+
     try {
-      const response = await fetch("https://ai-chatbot-backend-60lr.onrender.com/api/chat", {
+      const response = await fetch("http://127.0.0.1:8000/api/chat", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -180,7 +199,7 @@ function App() {
         body: JSON.stringify({ messages: apiMessages, temperature }),
         signal: controller.signal,
       });
-      
+
       if (controller.signal.aborted) {
         return;
       }
@@ -195,6 +214,7 @@ function App() {
 
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
+
       let buffer = "";
       let accumulatedContent = "";
       let accumulatedThinking = "";
@@ -218,6 +238,7 @@ function App() {
         }
 
         buffer += decoder.decode(value, { stream: true });
+
         const chunks = buffer.split("\n\n");
         buffer = chunks.pop();
 
@@ -229,20 +250,31 @@ function App() {
           }
 
           const trimmed = chunk.trim();
+
           if (!trimmed.startsWith("data: ")) continue;
+
           const payload = trimmed.slice(6);
+
           if (payload === "[DONE]") continue;
 
           try {
             const parsed = JSON.parse(payload);
+
             if (parsed.tool_status) {
               setMessages((prev) => {
                 const updated = [...prev];
-                updated[assistantIndex] = { ...updated[assistantIndex], toolStatus: parsed.tool_status };
+
+                updated[assistantIndex] = {
+                  ...updated[assistantIndex],
+                  toolStatus: parsed.tool_status,
+                };
+
                 return updated;
               });
+
               continue; // no delta to process on this event
             }
+
             const delta = parsed.choices?.[0]?.delta;
 
             if (delta?.content) accumulatedContent += delta.content;
@@ -252,12 +284,14 @@ function App() {
             if (currentRequestId === currentRequestIdRef.current) {
               setMessages((prev) => {
                 const updated = [...prev];
+
                 updated[assistantIndex] = {
                   ...updated[assistantIndex],
                   content: accumulatedContent,
                   display: accumulatedContent,
                   thinking: accumulatedThinking,
                 };
+
                 return updated;
               });
             }
@@ -268,32 +302,42 @@ function App() {
       }
 
       // Only update if this is still the current request
-      if (currentRequestId === currentRequestIdRef.current && !controller.signal.aborted) {
+      if (
+        currentRequestId === currentRequestIdRef.current &&
+        !controller.signal.aborted
+      ) {
         setMessages((prev) => {
           const updated = [...prev];
-          updated[assistantIndex] = { ...updated[assistantIndex], streaming: false };
+
+          updated[assistantIndex] = {
+            ...updated[assistantIndex],
+            streaming: false,
+          };
+
           return updated;
         });
       }
     } catch (error) {
-        if (error.name === "AbortError") {
-          return;
-        }
+      if (error.name === "AbortError") {
+        return;
+      }
 
-        if (currentRequestId !== currentRequestIdRef.current) {
-          return;
-        }
+      if (currentRequestId !== currentRequestIdRef.current) {
+        return;
+      }
 
-        setMessages((prev) => {
-          const updated = [...prev];
-          updated[assistantIndex] = {
-            role: "assistant",
-            content: "Unable to connect to the server.",
-            display: "Unable to connect to the server.",
-          };
-          return updated;
-        });
-      } finally {
+      setMessages((prev) => {
+        const updated = [...prev];
+
+        updated[assistantIndex] = {
+          role: "assistant",
+          content: "Unable to connect to the server.",
+          display: "Unable to connect to the server.",
+        };
+
+        return updated;
+      });
+    } finally {
       if (currentRequestId === currentRequestIdRef.current) {
         setLoading(false);
         setIsStreaming(false);
@@ -310,7 +354,10 @@ function App() {
     { title: "Hello", subtitle: "Ask me anything." },
     { title: "Hi there", subtitle: "I'm ready whenever you are." },
     { title: "Good to see you", subtitle: "Let's start a conversation." },
-    { title: "AI Chat", subtitle: "What would you like to talk about?" }
+    {
+      title: "let's have a fun conversation",
+      subtitle: "What would you like to talk about?",
+    },
   ];
 
   const randomWelcome = useMemo(() => {
@@ -320,7 +367,10 @@ function App() {
   return (
     <div className="app">
       <header className="header">
-        <button className="settings-btn" onClick={() => setShowSettings(true)}>
+        <button
+          className="settings-btn"
+          onClick={() => setShowSettings(true)}
+        >
           <FiSettings size={22} />
         </button>
       </header>
@@ -334,36 +384,64 @@ function App() {
         ) : (
           messages.map((msg, index) => {
             return (
-              <div key={index} className={`message-row ${msg.role === "user" ? "user-row" : "ai-row"}`}>
-                <div className={`message ${msg.role === "user" ? "user" : "ai"}`}>
-                  {msg.role === "assistant" && msg.thinking && msg.showThinking && (
-                    <>
-                      <button
-                        className="thinking-btn"
-                        onClick={() => setExpandedThinking(expandedThinking === index ? null : index)}
-                      >
-                        🧠 Thinking {expandedThinking === index ? "▲" : "▼"}
-                      </button>
-                      {expandedThinking === index && (
-                        <div className="thinking-box">{msg.thinking}</div>
-                      )}
-                    </>
-                  )}
+              <div
+                key={index}
+                className={`message-row ${
+                  msg.role === "user" ? "user-row" : "ai-row"
+                }`}
+              >
+                <div
+                  className={`message ${
+                    msg.role === "user" ? "user" : "ai"
+                  }`}
+                >
+                  {msg.role === "assistant" &&
+                    msg.thinking &&
+                    msg.showThinking && (
+                      <>
+                        <button
+                          className="thinking-btn"
+                          onClick={() =>
+                            setExpandedThinking(
+                              expandedThinking === index ? null : index
+                            )
+                          }
+                        >
+                          Thinking {expandedThinking === index ? "▲" : "▼"}
+                        </button>
 
-                  {msg.attachmentsPreview && msg.attachmentsPreview.length > 0 && (
-                    <div className="attachment-preview-row">
-                      {msg.attachmentsPreview.map((a) => (
-                        <div key={a.id} className="attachment-chip sent">
-                          {a.kind === "image" && <FiImage size={14} />}
-                          {a.kind === "video" && <FiVideo size={14} />}
-                          {a.kind === "audio" && <FiMusic size={14} />}
-                          <span>{a.name}</span>
-                        </div>
-                      ))}
+                        {expandedThinking === index && (
+                          <div className="thinking-box">{msg.thinking}</div>
+                        )}
+                      </>
+                    )}
+
+                  {msg.attachmentsPreview &&
+                    msg.attachmentsPreview.length > 0 && (
+                      <div className="attachment-preview-row">
+                        {msg.attachmentsPreview.map((a) => (
+                          <div
+                            key={a.id}
+                            className="attachment-chip sent"
+                          >
+                            {a.kind === "image" && <FiImage size={14} />}
+                            {a.kind === "video" && <FiVideo size={14} />}
+                            {a.kind === "audio" && <FiMusic size={14} />}
+                            <span>{a.name}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                  {msg.role === "assistant" ? (
+                    <div className="markdown-content">
+                      <ReactMarkdown>
+                        {msg.display}
+                      </ReactMarkdown>
                     </div>
+                  ) : (
+                    <div>{msg.display}</div>
                   )}
-
-                  <div>{msg.display}</div>
                 </div>
               </div>
             );
@@ -373,7 +451,9 @@ function App() {
         {loading && (
           <div className="message-row ai-row">
             <div className="message ai loading">
-              <span></span><span></span><span></span>
+              <span></span>
+              <span></span>
+              <span></span>
             </div>
           </div>
         )}
@@ -389,8 +469,13 @@ function App() {
                 {a.kind === "image" && <FiImage size={14} />}
                 {a.kind === "video" && <FiVideo size={14} />}
                 {a.kind === "audio" && <FiMusic size={14} />}
+
                 <span>{a.name}</span>
-                <button onClick={() => removeAttachment(a.id)} type="button">
+
+                <button
+                  onClick={() => removeAttachment(a.id)}
+                  type="button"
+                >
                   <FiX size={14} />
                 </button>
               </div>
@@ -411,13 +496,16 @@ function App() {
             {showMediaMenu && (
               <div className="media-menu">
                 <p className="media-menu-title">Attach media</p>
+
                 <ul>
                   <li onClick={() => openFilePicker("image")}>
                     <FiImage size={15} /> Image (jpg, png, etc.)
                   </li>
+
                   <li onClick={() => openFilePicker("video")}>
                     <FiVideo size={15} /> Video
                   </li>
+
                   <li onClick={() => openFilePicker("audio")}>
                     <FiMusic size={15} /> Audio
                   </li>
@@ -447,37 +535,75 @@ function App() {
                 }
               }}
             />
+
             {isStreaming && (
-              <button className="stop-btn" onClick={stopResponse} type="button">
+              <button
+                className="stop-btn"
+                onClick={stopResponse}
+                type="button"
+              >
                 <FiSquare size={14} />
               </button>
             )}
           </div>
 
           <button
-            className={`thinking-toggle ${thinkingEnabled ? 'active' : ''}`}
+            className={`thinking-toggle ${
+              thinkingEnabled ? "active" : ""
+            }`}
             onClick={() => setThinkingEnabled(!thinkingEnabled)}
           >
             🧠 Think
           </button>
-          <button className="send-btn" onClick={sendMessage}>Send</button>
+
+          <button className="send-btn" onClick={sendMessage}>
+            Send
+          </button>
         </div>
       </footer>
 
       {showSettings && (
-        <div className="settings-overlay" onClick={() => setShowSettings(false)}>
-          <div className="settings-modal" onClick={(e) => e.stopPropagation()}>
+        <div
+          className="settings-overlay"
+          onClick={() => setShowSettings(false)}
+        >
+          <div
+            className="settings-modal"
+            onClick={(e) => e.stopPropagation()}
+          >
             <h2>Settings</h2>
-            <label className="temperature-label">Model Temperature</label>
-            <input type="range" min="0" max="2" step="0.1" value={temperature} onChange={(e) => setTemperature(Number(e.target.value))} />
-            <p className="temperature-value">{temperature.toFixed(1)}</p>
+
+            <label className="temperature-label">
+              Model Temperature
+            </label>
+
+            <input
+              type="range"
+              min="0"
+              max="2"
+              step="0.1"
+              value={temperature}
+              onChange={(e) => setTemperature(Number(e.target.value))}
+            />
+
+            <p className="temperature-value">
+              {temperature.toFixed(1)}
+            </p>
+
             <small className="temperature-info">
-              Lower values make the AI more focused and deterministic.<br />
+              Lower values make the AI more focused and deterministic.
+              <br />
               Higher values make the AI more creative and diverse.
             </small>
+
             <div className="settings-buttons">
-              <button onClick={() => setShowSettings(false)}>Cancel</button>
-              <button onClick={saveSettings}>Save</button>
+              <button onClick={() => setShowSettings(false)}>
+                Cancel
+              </button>
+
+              <button onClick={saveSettings}>
+                Save
+              </button>
             </div>
           </div>
         </div>
