@@ -8,6 +8,7 @@ function App() {
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [openSetting, setOpenSetting] = useState(null);
   const [thinkingEnabled, setThinkingEnabled] = useState(false);
   const [expandedThinking, setExpandedThinking] = useState(null);
   const [showMediaMenu, setShowMediaMenu] = useState(false);
@@ -17,6 +18,9 @@ function App() {
   const [temperature, setTemperature] = useState(() => {
     const saved = localStorage.getItem("temperature");
     return saved ? Number(saved) : 0.7;
+  });
+  const [systemPrompt, setSystemPrompt] = useState(() => {
+  return localStorage.getItem("systemPrompt") || "";
   });
 
   const messagesEndRef = useRef(null);
@@ -42,6 +46,8 @@ function App() {
 
   const saveSettings = () => {
     localStorage.setItem("temperature", temperature);
+    localStorage.setItem("systemPrompt", systemPrompt);
+    setOpenSetting(null);
     setShowSettings(false);
   };
 
@@ -196,7 +202,7 @@ function App() {
           "Content-Type": "application/json",
           Accept: "text/event-stream",
         },
-        body: JSON.stringify({ messages: apiMessages, temperature }),
+        body: JSON.stringify({ messages: apiMessages, temperature,system_prompt: systemPrompt, }),
         signal: controller.signal,
       });
 
@@ -553,7 +559,7 @@ function App() {
             }`}
             onClick={() => setThinkingEnabled(!thinkingEnabled)}
           >
-            🧠 Think
+             Think
           </button>
 
           <button className="send-btn" onClick={sendMessage}>
@@ -563,51 +569,172 @@ function App() {
       </footer>
 
       {showSettings && (
-        <div
-          className="settings-overlay"
-          onClick={() => setShowSettings(false)}
-        >
-          <div
-            className="settings-modal"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h2>Settings</h2>
-
-            <label className="temperature-label">
-              Model Temperature
-            </label>
-
-            <input
-              type="range"
-              min="0"
-              max="2"
-              step="0.1"
-              value={temperature}
-              onChange={(e) => setTemperature(Number(e.target.value))}
-            />
-
-            <p className="temperature-value">
-              {temperature.toFixed(1)}
-            </p>
-
-            <small className="temperature-info">
-              Lower values make the AI more focused and deterministic.
-              <br />
-              Higher values make the AI more creative and diverse.
-            </small>
-
-            <div className="settings-buttons">
-              <button onClick={() => setShowSettings(false)}>
-                Cancel
-              </button>
-
-              <button onClick={saveSettings}>
-                Save
-              </button>
-            </div>
-          </div>
+  <div
+    className="settings-overlay"
+    onClick={() => {
+      setShowSettings(false);
+      setOpenSetting(null);
+    }}
+  >
+    <aside
+      className="settings-drawer"
+      onClick={(e) => e.stopPropagation()}
+    >
+      <div className="settings-header">
+        <div>
+          <h2>Settings</h2>
+          <p>Customize how the AI responds</p>
         </div>
-      )}
+
+        <button
+          className="settings-close-btn"
+          onClick={() => {
+            setShowSettings(false);
+            setOpenSetting(null);
+          }}
+          type="button"
+        >
+          <FiX size={22} />
+        </button>
+      </div>
+
+      <div className="settings-content">
+
+        {/* Temperature */}
+        <div className="setting-section">
+          <button
+            type="button"
+            className={`setting-title ${
+              openSetting === "temperature" ? "active" : ""
+            }`}
+            onClick={() =>
+              setOpenSetting(
+                openSetting === "temperature"
+                  ? null
+                  : "temperature"
+              )
+            }
+          >
+            <span className="setting-title-left">
+              
+              <span>
+                <strong>Model Temperature</strong>
+                <small>Control creativity</small>
+              </span>
+            </span>
+
+            <span className="setting-arrow">
+              {openSetting === "temperature" ? "▲" : "▼"}
+            </span>
+          </button>
+
+          {openSetting === "temperature" && (
+            <div className="setting-panel">
+              <div className="temperature-header">
+                <span>Temperature</span>
+                <strong>{temperature.toFixed(1)}</strong>
+              </div>
+
+              <input
+                className="temperature-slider"
+                type="range"
+                min="0"
+                max="2"
+                step="0.1"
+                value={temperature}
+                onChange={(e) =>
+                  setTemperature(Number(e.target.value))
+                }
+              />
+
+              <div className="temperature-range">
+                <span>Focused</span>
+                <span>Balanced</span>
+                <span>Creative</span>
+              </div>
+
+              <p className="temperature-info">
+                Lower values make the AI more focused and
+                deterministic. Higher values make the AI more
+                creative and diverse.
+              </p>
+            </div>
+          )}
+        </div>
+
+        {/* System Prompt */}
+        <div className="setting-section">
+          <button
+            type="button"
+            className={`setting-title ${
+              openSetting === "systemPrompt" ? "active" : ""
+            }`}
+            onClick={() =>
+              setOpenSetting(
+                openSetting === "systemPrompt"
+                  ? null
+                  : "systemPrompt"
+              )
+            }
+          >
+            <span className="setting-title-left">
+              <span>
+                <strong>System Prompt</strong>
+                <small>Customize AI behavior</small>
+              </span>
+            </span>
+
+            <span className="setting-arrow">
+              {openSetting === "systemPrompt" ? "▲" : "▼"}
+            </span>
+          </button>
+
+          {openSetting === "systemPrompt" && (
+            <div className="setting-panel">
+              <textarea
+                className="system-prompt-input"
+                value={systemPrompt}
+                onChange={(e) =>
+                  setSystemPrompt(e.target.value)
+                }
+                placeholder="Tell the AI how you want it to behave..."
+                rows={7}
+              />
+
+              <p className="setting-description">
+                This instruction is sent to the AI before your
+                conversation and helps control its behavior,
+                personality, and response style.
+              </p>
+            </div>
+          )}
+        </div>
+
+      </div>
+
+      <div className="settings-footer">
+        <button
+          type="button"
+          className="settings-cancel"
+          onClick={() => {
+            setShowSettings(false);
+            setOpenSetting(null);
+          }}
+        >
+          Cancel
+        </button>
+
+        <button
+          type="button"
+          className="settings-save"
+          onClick={saveSettings}
+        >
+          Save Changes
+        </button>
+      </div>
+    </aside>
+  </div>
+)}
     </div>
   );
 }

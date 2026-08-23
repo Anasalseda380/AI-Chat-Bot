@@ -7,6 +7,30 @@ use Illuminate\Support\Facades\Http;
 
 class ChatController extends Controller
 {
+    /**
+     * Folder (relative to resource_path()) that holds one *.md file per
+     * skill. To add a new skill, drop a new .md file in there — nothing
+     * else in this controller needs to change.
+     */
+    private const SKILLS_DIR = 'skills';
+
+    /**
+     * Small always-on nudge telling the model that a use_skill tool
+     * exists. The actual catalog (slug + description for every skill)
+     * lives inside the use_skill tool's own description — see
+     * skillTool() — because tool definitions are sent to OpenRouter on
+     * every single request regardless (the completions API is
+     * stateless), so that's the one place we only have to write the
+     * catalog once and have it reliably reach the model on every turn.
+     */
+    private const SKILL_TOOL_HINT =
+        'You have access to a use_skill tool that loads detailed, '
+        . 'specialized instructions for certain topics. Check its '
+        . 'description for the list of available skills. If the user\'s '
+        . 'request clearly matches one, call use_skill with that skill\'s '
+        . 'exact slug before answering. If nothing matches, just answer '
+        . 'normally.';
+
     public function chat(Request $request)
     {
         $validated = $request->validate([
@@ -14,11 +38,30 @@ class ChatController extends Controller
             'messages.*.role' => 'required|string',
             'messages.*.content' => 'present',
             'temperature' => 'required|numeric|min:0|max:2',
+            'system_prompt' => 'nullable|string',
         ]);
 
-        return response()->stream(function () use ($validated) {
+        $messages = $validated['messages'];
+
+        $systemParts = [self::SKILL_TOOL_HINT];
+
+        if (trim($validated['system_prompt'] ?? '') !== '') {
+            $systemParts[] = trim($validated['system_prompt']);
+        }
+
+        $messages = array_merge(
+            [
+                [
+                    'role' => 'system',
+                    'content' => implode("\n\n", $systemParts),
+                ],
+            ],
+            $messages
+        );
+
+        return response()->stream(function () use ($messages, $validated) {
             $this->streamChat(
-                $validated['messages'],
+                $messages,
                 $validated['temperature']
             );
         }, 200, [
@@ -33,6 +76,7 @@ class ChatController extends Controller
         float $temperature,
         int $toolDepth = 0
     ): void {
+
         // Prevent infinite tool-calling loops
         if ($toolDepth > 5) {
             echo "data: " . json_encode([
@@ -220,6 +264,10 @@ class ChatController extends Controller
                     $args['expression'] ?? ''
                 ),
 
+                'use_skill' => $this->useSkill(
+                    $args['skill'] ?? ''
+                ),
+
                 default => 'Unknown tool',
             };
 
@@ -242,7 +290,7 @@ class ChatController extends Controller
 
     private function tools(): array
     {
-        return [
+        $tools = [
             [
                 'type' => 'function',
                 'function' => [
@@ -305,6 +353,163 @@ class ChatController extends Controller
                     ],
                 ],
             ],
+        ];
+
+        $skillTool = $this->skillTool();
+
+        if ($skillTool) {
+            $tools[] = $skillTool;
+        }
+
+        return $tools;
+    }
+
+    /**
+     * Build the use_skill tool definition. Its description carries the
+     * full skill catalog (slug + description for every skill found on
+     * disk) — this is what lets the model decide, on its own, whether a
+     * given user message matches a skill, without us doing any keyword
+     * matching server-side anymore.
+     */
+    private function skillTool(): ?array
+    {
+        $skills = $this->loadSkills();
+
+        if (empty($skills)) {
+            return null;
+        }
+
+        $catalog = collect($skills)
+            ->map(fn ($skill) => "- {$skill['slug']}: {$skill['description']}")
+            ->implode("\n");
+
+        return [
+            'type' => 'function',
+            'function' => [
+                'name' => 'use_skill',
+                'description' =>
+                    "Load detailed instructions for a specialized skill "
+                    . "before answering. Available skills:\n\n"
+                    . $catalog
+                    . "\n\nCall this once with the exact skill slug when "
+                    . "the user's request clearly matches one of the "
+                    . "skills above. Do not call it otherwise.",
+                'parameters' => [
+                    'type' => 'object',
+                    'properties' => [
+                        'skill' => [
+                            'type' => 'string',
+                            'description' =>
+                                'The exact slug of the skill to load.',
+                            'enum' => array_keys($skills),
+                        ],
+                    ],
+                    'required' => ['skill'],
+                    'additionalProperties' => false,
+                ],
+            ],
+        ];
+    }
+
+    /**
+     * Return the instructions for one skill — this is what gets sent
+     * back to the model as the tool result after it calls use_skill.
+     */
+    private function useSkill(string $slug): string
+    {
+        $slug = trim($slug);
+
+        if ($slug === '') {
+            \Log::info('use_skill: empty slug received');
+            return 'Error: no skill slug provided.';
+        }
+
+        $skills = $this->loadSkills();
+
+        if (!isset($skills[$slug])) {
+            \Log::warning('use_skill: unknown slug', [
+                'slug' => $slug,
+                'available' => array_keys($skills),
+            ]);
+
+            return "Error: unknown skill '{$slug}'. Available skills: "
+                . implode(', ', array_keys($skills));
+        }
+
+        \Log::info('use_skill: loaded', ['slug' => $slug]);
+
+        return $skills[$slug]['instructions'];
+    }
+
+    /**
+     * Load every *.md file under resources/skills, parse its frontmatter
+     * (name, description) and body (instructions), and key the result by
+     * filename slug. To add a new skill, just drop a new .md file in
+     * that folder — no code changes needed here.
+     */
+    private function loadSkills(): array
+    {
+        $dir = resource_path(self::SKILLS_DIR);
+
+        if (!is_dir($dir)) {
+            return [];
+        }
+
+        $skills = [];
+
+        foreach (glob($dir . '/*.md') as $path) {
+            $skill = $this->parseSkillFile($path);
+
+            if ($skill) {
+                $skills[$skill['slug']] = $skill;
+            }
+        }
+
+        return $skills;
+    }
+
+    /**
+     * Parse a single skill .md file. Expects:
+     *
+     *   ---
+     *   name: some_name
+     *   description: One line describing when this skill applies.
+     *   ---
+     *
+     *   Free-form instructions body...
+     *
+     * Returns null if the file doesn't have a valid frontmatter block or
+     * is missing a description.
+     */
+    private function parseSkillFile(string $path): ?array
+    {
+        $raw = file_get_contents($path);
+
+        if ($raw === false) {
+            return null;
+        }
+
+        if (!preg_match('/^---\s*\n(.*?)\n---\s*\n?(.*)$/s', $raw, $m)) {
+            return null;
+        }
+
+        $meta = [];
+
+        foreach (explode("\n", $m[1]) as $line) {
+            if (preg_match('/^([a-zA-Z0-9_]+):\s*(.*)$/', trim($line), $lm)) {
+                $meta[$lm[1]] = trim($lm[2]);
+            }
+        }
+
+        if (empty($meta['description'])) {
+            return null;
+        }
+
+        return [
+            'slug' => pathinfo($path, PATHINFO_FILENAME),
+            'name' => $meta['name'] ?? pathinfo($path, PATHINFO_FILENAME),
+            'description' => $meta['description'],
+            'instructions' => trim($m[2]),
         ];
     }
 
@@ -409,8 +614,9 @@ class ChatController extends Controller
 
             if ($response->failed()) {
                 return [
-                    'error' =>
-                        "Search request failed (HTTP {$response->status()})"
+                    'error' => 'Search request failed',
+                    'status' => $response->status(),
+                    'body' => $response->body(),
                 ];
             }
 
@@ -442,8 +648,8 @@ class ChatController extends Controller
             ];
         } catch (\Throwable $e) {
             return [
-                'error' =>
-                    'Search request failed.'
+                'error' => 'Search request failed',
+                'exception' => $e->getMessage(),
             ];
         }
     }
