@@ -440,11 +440,31 @@ function App() {
                     )}
 
                   {msg.role === "assistant" ? (
-                    <div className="markdown-content">
-                      <ReactMarkdown>
-                        {msg.display}
-                      </ReactMarkdown>
-                    </div>
+                    <>
+                      {msg.toolStatus === "web_search" && (
+                        <div className="tool-status">
+                          🔎 Searching on web...
+                        </div>
+                      )}
+
+                      {msg.toolStatus === "calculator" && (
+                        <div className="tool-status">
+                          🧮 Calculating...
+                        </div>
+                      )}
+
+                      {msg.toolStatus === "get_weather" && (
+                        <div className="tool-status">
+                          🌤️ Getting the temperature...
+                        </div>
+                      )}
+
+                      <div className="markdown-content">
+                        <ReactMarkdown>
+                          {msg.display}
+                        </ReactMarkdown>
+                      </div>
+                    </>
                   ) : (
                     <div>{msg.display}</div>
                   )}
