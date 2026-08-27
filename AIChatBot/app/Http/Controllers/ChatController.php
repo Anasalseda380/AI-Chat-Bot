@@ -41,34 +41,6 @@ class ChatController extends Controller
             'system_prompt' => 'nullable|string',
         ]);
 
-        // ===== ADD THIS DEBUG BLOCK =====
-        \Log::info('=== SKILL DEBUG ON RENDER ===');
-        
-        $dir = resource_path('skills');
-        \Log::info('1. resource_path("skills"): ' . $dir);
-        \Log::info('   Exists? ' . (is_dir($dir) ? 'YES' : 'NO'));
-        \Log::info('   Readable? ' . (is_readable($dir) ? 'YES' : 'NO'));
-        
-        if (is_dir($dir)) {
-            $files = glob($dir . '/*.md');
-            \Log::info('   Files: ' . json_encode($files));
-        }
-        
-        $dir2 = base_path('resources/skills');
-        \Log::info('2. base_path("resources/skills"): ' . $dir2);
-        \Log::info('   Exists? ' . (is_dir($dir2) ? 'YES' : 'NO'));
-        
-        $dir3 = '/app/resources/skills';
-        \Log::info('3. /app/resources/skills: ' . $dir3);
-        \Log::info('   Exists? ' . (is_dir($dir3) ? 'YES' : 'NO'));
-        
-        $dir4 = __DIR__ . '/../../resources/skills';
-        \Log::info('4. __DIR__/../../resources/skills: ' . $dir4);
-        \Log::info('   Exists? ' . (is_dir($dir4) ? 'YES' : 'NO'));
-        
-        \Log::info('=== END DEBUG ===');
-        // ===== END DEBUG BLOCK =====
-
         $messages = $validated['messages'];
 
         $systemParts = [self::SKILL_TOOL_HINT];
