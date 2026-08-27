@@ -128,7 +128,7 @@ class ChatController extends Controller
                 'Content-Type' => 'application/json',
             ])
             ->post('https://openrouter.ai/api/v1/chat/completions', [
-                'model' => 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free',
+                'model' => 'openai/gpt-4o-mini',
                 'messages' => $messages,
                 'temperature' => $temperature,
                 'reasoning' => [
